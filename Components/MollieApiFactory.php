@@ -6,69 +6,138 @@ require_once __DIR__ . '/../Client/vendor/autoload.php';
 
 use Mollie\Api\Exceptions\ApiException;
 use Mollie\Api\MollieApiClient;
+use MollieShopware\MollieShopware;
+use Psr\Log\LoggerInterface;
 
 class MollieApiFactory
 {
-    /** @var \MollieShopware\Components\Config */
+    /**
+     * @var Config
+     */
     protected $config;
 
-    /** @var MollieApiClient */
-    protected $apiClient;
+    /**
+     * @var LoggerInterface
+     */
+    private $logger;
+
 
     /**
-     * MollieApiFactory constructor
-     *
      * @param Config $config
+     * @param LoggerInterface $logger
      */
-    public function __construct(Config $config)
+    public function __construct(Config $config, LoggerInterface $logger)
     {
         $this->config = $config;
+        $this->logger = $logger;
     }
 
+
     /**
-     * Create the API client
-     *
      * @param null $shopId
-     *
      * @return MollieApiClient
-     *
      * @throws ApiException
-     * @throws \Mollie\Api\Exceptions\IncompatiblePlatform
      */
     public function create($shopId = null)
     {
         $this->requireDependencies();
 
-        if (empty($this->apiClient)) {
-            $this->apiClient = new MollieApiClient();
+        // set the configuration for the shop
+        $this->config->setShop($shopId);
 
-            try {
-                // add platform name and version
-                $this->apiClient->addVersionString(
-                    'Shopware/' .
-                    Shopware()->Container()->getParameter('shopware.release.version')
-                );
+        # either use the test or the live api key
+        # depending on our sub shop configuration
+        $apiKey = ($this->config->isTestmodeActive()) ? $this->config->getTestApiKey() : $this->config->apiKey();
 
-                // add plugin name and version
-                $this->apiClient->addVersionString(
-                    'MollieShopware/1.5.20'
-                );
-            }
-            catch (\Exception $ex) {
-                //
-            }
-        }
+        return $this->buildApiClient(
+            $apiKey
+        );
+    }
+
+    /**
+     * @param null $shopId
+     * @return MollieApiClient
+     * @throws ApiException
+     */
+    public function createLiveClient($shopId = null)
+    {
+        $this->requireDependencies();
 
         // set the configuration for the shop
         $this->config->setShop($shopId);
 
-        // set the api key based on the configuration
-        $this->apiClient->setApiKey($this->config->apiKey());
-
-        return $this->apiClient;
+        return $this->buildApiClient(
+            $this->config->apiKey()
+        );
     }
 
-    public function requireDependencies()
+    /**
+     * @param null $shopId
+     * @return MollieApiClient
+     * @throws ApiException
+     */
+    public function createTestClient($shopId = null)
+    {
+        $this->requireDependencies();
+
+        // set the configuration for the shop
+        $this->config->setShop($shopId);
+
+        return $this->buildApiClient(
+            $this->config->getTestApiKey()
+        );
+    }
+
+
+    /**
+     * @param $apiKey
+     * @return MollieApiClient
+     * @throws ApiException
+     */
+    private function buildApiClient($apiKey)
+    {
+        $client = new MollieApiClient();
+
+        $shopwareVersion = Shopware()->Config()->get('Version');
+
+        # this parameter has been deprecated
+        # we need a new version access for shopware 5.5 and up.
+        # deprecated to be removed in 5.6
+        if ($shopwareVersion === '___VERSION___') {
+            /** @var \Shopware\Components\ShopwareReleaseStruct $release */
+            $release = Shopware()->Container()->get('shopware.release');
+            $shopwareVersion = $release->getVersion();
+        }
+
+        // add platform name and version
+        $client->addVersionString('Shopware/' . $shopwareVersion);
+
+        // add plugin name and version
+        $client->addVersionString(
+            'MollieShopware/' . MollieShopware::PLUGIN_VERSION
+        );
+
+        try {
+
+            // set the api key based on the configuration
+            $client->setApiKey($apiKey);
+
+        } catch (\Exception $ex) {
+            $this->logger->error(
+                'Fatal error with Mollie API Key. Invalid Key: ' . $apiKey,
+                array(
+                    'error' => $ex->getMessage(),
+                )
+            );
+        }
+
+        return $client;
+    }
+
+    /**
+     *
+     */
+    private function requireDependencies()
     {
         // Load composer libraries
         if (file_exists(__DIR__ . '/../Client/vendor/scoper-autoload.php')) {
@@ -95,4 +164,5 @@ class MollieApiFactory
             require_once __DIR__ . '/../Client/vendor/mollie/mollie-api-php/src/MollieApiClient.php';
         }
     }
+
 }

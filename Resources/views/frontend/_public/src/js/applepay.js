@@ -2,14 +2,19 @@
     "use strict";
 
     $(document).ready(function() {
-        manageApplePay();
+        hideApplePayIfNotAllowed();
     });
 
     $(document).ajaxComplete(function() {
-        manageApplePay();
+        hideApplePayIfNotAllowed();
     });
 
-    function manageApplePay() {
+    /**
+     * This function is used to hide Apple Pay if the visitor can't use it.
+     * Please keep in mind, this is Apple Pay and not Apple Pay Direct.
+     * So it just hides Apple Pay on the payment selection page.
+     */
+    function hideApplePayIfNotAllowed() {
         // Find the hidden Apple Pay element
         var applePayInput = document.getElementsByClassName('payment-mean-mollie-applepay');
         var applePayLabel = document.getElementsByClassName('payment-mean-mollie-applepay-label');

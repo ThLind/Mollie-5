@@ -2,57 +2,84 @@
 
 namespace MollieShopware\Components\Services;
 
+use Enlight_Components_Db_Adapter_Pdo_Mysql;
+use Exception;
+use MollieShopware\Components\Config;
 use MollieShopware\Components\Logger;
-use Shopware\Models\Article\Detail;
+use MollieShopware\Components\TransactionBuilder\Models\BasketItem;
+use Psr\Log\LoggerInterface;
+use Shopware\Components\DependencyInjection\Container as DIContainer;
+use Shopware\Components\Model\ModelManager;
 use Shopware\Models\Order\Basket;
+use Shopware\Models\Order\Detail;
+use Shopware\Models\Order\Order;
 use Shopware\Models\Order\Repository;
+use Shopware\Models\Order\Status;
+use Shopware\Models\Voucher\Voucher;
+use Shopware_Components_Modules;
+use Symfony\Component\HttpFoundation\Request;
+use Zend_Db_Adapter_Exception;
 
 class BasketService
 {
-    /** @var \MollieShopware\Components\Config $config */
+    /** @var Config $config */
     protected $config;
 
-    /** @var \Shopware\Components\Model\ModelManager $modelManager */
+    /** @var ModelManager $modelManager */
     protected $modelManager;
 
-    /** @var \Shopware_Components_Modules $basketModule */
+    /** @var Shopware_Components_Modules $basketModule */
     protected $basketModule;
 
-    /** @var \MollieShopware\Components\Services\OrderService $orderService */
+    /** @var OrderService $orderService */
     protected $orderService;
 
-    /**
-     * Constructor
-     *
-     * @param \Shopware\Components\Model\ModelManager $modelManager
-     */
-    public function __construct(\Shopware\Components\Model\ModelManager $modelManager)
-    {
-        $this->config = Shopware()->Container()
-            ->get('mollie_shopware.config');
+    /** @var Enlight_Components_Db_Adapter_Pdo_Mysql|null */
+    protected $db;
 
+    /**
+     * @var LoggerInterface
+     */
+    private $logger;
+
+    /** @var DIContainer */
+    private $container;
+
+    /**
+     * @param ModelManager $modelManager
+     * @param LoggerInterface $logger
+     * @param DIContainer $container
+     * @throws Exception
+     */
+    public function __construct(ModelManager $modelManager, LoggerInterface $logger, $container)
+    {
         $this->modelManager = $modelManager;
+        $this->logger = $logger;
+
+        $this->config = Shopware()->Container()->get('mollie_shopware.config');
 
         $this->basketModule = Shopware()->Modules()->Basket();
 
-        $this->orderService = Shopware()->Container()
-            ->get('mollie_shopware.order_service');
+        $this->orderService = Shopware()->Container()->get('mollie_shopware.order_service');
+
+        $this->db = Shopware()->Container()->get('db');
+
+        $this->container = $container;
     }
 
     /**
      * Restore Basket
      *
-     * @param \Shopware\Models\Order\Order|int $orderId
+     * @param Order|int $orderId
      *
-     * @throws \Exception
+     * @throws Exception
      */
     public function restoreBasket($orderId)
     {
         // get the order model
-        if ($orderId instanceof \Shopware\Models\Order\Order) {
+        if ($orderId instanceof Order) {
             $order = $orderId;
-        }
-        else {
+        } else {
             $order = $this->orderService->getOrderById($orderId);
         }
 
@@ -62,7 +89,7 @@ class BasketService
 
             if (!empty($orderDetails)) {
                 // clear basket
-                $this->basketModule->clearBasket();
+                $this->basketModule->sDeleteBasket();
 
                 // set comment
                 $commentText = "The payment on this order failed, the customer is retrying. ";
@@ -90,11 +117,23 @@ class BasketService
                             $order->setInvoiceAmount($order->getInvoiceAmount() - $orderDetail->getPrice());
                         }
                     } else {
+                        $attributes = $orderDetail->getAttribute();
+                        // if swagCustomProductsConfigurationHash exists for orderDetail restore it in request
+                        if (property_exists($attributes, 'swagCustomProductsConfigurationHash')) {
+                            $customProductsHash = $attributes->getSwagCustomProductsConfigurationHash();
+                            $this->container->get('front')->Request()->setParam('customProductsHash', $customProductsHash);
+                        }
+
                         // add product to basket
-                        $this->basketModule->sAddArticle(
+                        $id = $this->basketModule->sAddArticle(
                             $orderDetail->getArticleNumber(),
                             $orderDetail->getQuantity()
                         );
+
+                        if (is_int($id)) {
+                            // set attributes
+                            $this->addAttributes($id, $orderDetail);
+                        }
                     }
 
                     // reset ordered quantity
@@ -110,29 +149,15 @@ class BasketService
                 // recalculate order
                 $order->calculateInvoiceAmount();
 
-                /** @var \Shopware\Models\Order\Status $statusCanceled */
-                $statusCanceled = Shopware()->Models()->getRepository(
-                    \Shopware\Models\Order\Status::class
+                /** @var Status $statusCanceled */
+                $statusCanceled = Shopware()->Container()->get('models')->getRepository(
+                    Status::class
                 )->find(
-                    \Shopware\Models\Order\Status::PAYMENT_STATE_THE_PROCESS_HAS_BEEN_CANCELLED
+                    Status::PAYMENT_STATE_THE_PROCESS_HAS_BEEN_CANCELLED
                 );
 
                 // set payment status
                 if ($this->config->cancelFailedOrders()) {
-                    /** @var \MollieShopware\Components\Services\OrderHistoryService $historyService */
-                    $historyService = Shopware()->Container()->get('mollie_shopware.order_history_service');
-
-                    // add item to the history
-                    if ($historyService !== null) {
-                        $historyService->addOrderHistory(
-                            $order,
-                            $order->getOrderStatus()->getId(),
-                            $order->getOrderStatus()->getId(),
-                            $statusCanceled->getId(),
-                            $order->getPaymentStatus()->getId()
-                        );
-                    }
-
                     $order->setPaymentStatus($statusCanceled);
                 }
 
@@ -147,116 +172,92 @@ class BasketService
     }
 
     /**
-     * Get positions from basket
+     * Adds order details attributes to restored order basket attributes
      *
-     * @return array
-     * @throws \Exception
+     * @param int $id
+     * @param Detail $orderDetail
+     * @throws Zend_Db_Adapter_Exception
      */
-    function getBasketLines($userData = array())
+    function addAttributes($id, Detail $orderDetail)
     {
-        $items = [];
+        // load all order basket attributes
+        $orderBasketAttributes = $this->getOrderBasketAttributes($id);
 
-        try {
-            /** @var Repository $basketRepo */
-            $basketRepo = Shopware()->Models()->getRepository(
-                Basket::class
-            );
+        if ($orderBasketAttributes === null) {
+            return;
+        }
 
-            /** @var Basket[] $basketItems */
-            $basketItems = $basketRepo->findBy([
-                'sessionId' => Shopware()->Session()->offsetGet('sessionId')
-            ]);
+        // load all order details attributes
+        $orderDetailAttributes = $this->getOrderDetailsAttributes($orderDetail->getId());
 
-            foreach ($basketItems as $basketItem) {
-                $unitPrice = round($basketItem->getPrice(), 2);
-                $netPrice = $basketItem->getNetPrice();
-                $totalAmount = $unitPrice * $basketItem->getQuantity();
-                $vatAmount = 0;
+        if (!$orderDetailAttributes) {
+            return;
+        }
 
-                if (
-                    isset($userData['additional']['charge_vat'], $userData['additional']['show_net'])
-                    && $userData['additional']['charge_vat'] === true
-                    && $userData['additional']['show_net'] === false
-                ) {
-                    $unitPrice *= ($basketItem->getTaxRate() + 100) / 100;
-                    $totalAmount = $unitPrice * $basketItem->getQuantity();
-                }
+        // create update array
+        $update = [];
 
-                if (
-                    isset($userData['additional']['charge_vat'])
-                    && $userData['additional']['charge_vat'] === true
-                ) {
-                    $vatAmount = $totalAmount * ($basketItem->getTaxRate() / ($basketItem->getTaxRate() + 100));
-                }
-
-                // build the order line array
-                $orderLine = [
-                    'basket_item_id' => $basketItem->getId(),
-                    'article_id' => $basketItem->getArticleId(),
-                    'name' => $basketItem->getArticleName(),
-                    'type' => $this->getOrderType($basketItem, $unitPrice),
-                    'quantity' => $basketItem->getQuantity(),
-                    'unit_price' => $unitPrice,
-                    'net_price' => $netPrice,
-                    'total_amount' => $totalAmount,
-                    'vat_rate' => $vatAmount == 0 ? 0 : $basketItem->getTaxRate(),
-                    'vat_amount' => $vatAmount,
-                ];
-
-                if (
-                    $basketItem !== null
-                    && $basketItem->getAttribute() !== null
-                    && method_exists($basketItem->getAttribute(), 'setBasketItemId')
-                ) {
-                    $basketItem->getAttribute()->setBasketItemId($basketItem->getId());
-
-                    $this->modelManager->persist($basketItem);
-                    $this->modelManager->flush($basketItem);
-                }
-
-                // add the order line to items
-                $items[] = $orderLine;
+        foreach ($orderBasketAttributes as $key => $attribute) {
+            // remove id columns
+            if (in_array($key, ['id', 'basketID', 'basket_item_id'])) {
+                continue;
             }
-        }
-        catch (\Exception $ex) {
-            Logger::log(
-                'error',
-                $ex->getMessage(),
-                $ex
-            );
+
+            // check if attribute exists in order details
+            if (!array_key_exists($key, $orderDetailAttributes)) {
+                continue;
+            }
+
+            // add attribute
+            $update[$key] = $orderDetailAttributes[$key];
         }
 
-        return $items;
+        // perform update
+        $this->db->update('s_order_basket_attributes', $update, 'id = ' . $id);
     }
 
     /**
-     * @param Basket $basket
-     * @param float $unitPrice
+     * @param int $id
+     * @return array|null
      */
-    private function getOrderType($basketItem, $unitPrice)
+    private function getOrderBasketAttributes($id)
     {
-        // set the order line type
-        if (strpos($basketItem->getOrderNumber(), 'surcharge') !== false) {
-            return 'surcharge';
+        $attributesResult = $this->db->fetchAll(
+            'SELECT * FROM s_order_basket_attributes WHERE basketID = ?;',
+            [$id]
+        );
+
+        if (!$attributesResult) {
+            return null;
         }
 
-        if (strpos($basketItem->getOrderNumber(), 'discount') !== false) {
-            return 'discount';
+        if (!array_key_exists(0, $attributesResult)) {
+            return null;
         }
 
-        if ($basketItem->getEsdArticle() > 0) {
-            return 'digital';
+        return $attributesResult[0];
+    }
+
+    /**
+     * @param int $id
+     * @return array|null
+     */
+    private function getOrderDetailsAttributes($id)
+    {
+        $orderDetailAttributesResult = $this->db->fetchAll(
+            'SELECT * FROM s_order_details_attributes WHERE id = ?;',
+            [$id]
+        );
+
+        if (!$orderDetailAttributesResult) {
+            return null;
         }
 
-        if ($basketItem->getMode() == 2) {
-            return 'discount';
+        if (!array_key_exists(0, $orderDetailAttributesResult)) {
+            return null;
         }
 
-        if ($unitPrice < 0) {
-            return 'discount';
-        }
-
-        return 'physical';
+        return $orderDetailAttributesResult[0];
     }
 
     /**
@@ -264,9 +265,9 @@ class BasketService
      *
      * @param int $voucherId
      *
-     * @return \Shopware\Models\Voucher\Voucher $voucher
+     * @return Voucher $voucher
      *
-     * @throws \Exception
+     * @throws Exception
      */
     public function getVoucherById($voucherId)
     {
@@ -275,19 +276,19 @@ class BasketService
         try {
             /** @var \Shopware\Models\Voucher\Repository $voucherRepo */
             $voucherRepo = $this->modelManager->getRepository(
-                \Shopware\Models\Voucher\Voucher::class
+                Voucher::class
             );
 
-            /** @var \Shopware\Models\Voucher\Voucher $voucher */
+            /** @var Voucher $voucher */
             $voucher = $voucherRepo->findOneBy([
                 'id' => $voucherId
             ]);
-        }
-        catch (\Exception $ex) {
-            Logger::log(
-                'error',
-                $ex->getMessage(),
-                $ex
+        } catch (Exception $ex) {
+            $this->logger->error(
+                'Error when loading voucher by ID: ' . $voucherId,
+                array(
+                    'error' => $ex->getMessage(),
+                )
             );
         }
 
@@ -301,7 +302,7 @@ class BasketService
      *
      * @return int $result
      *
-     * @throws \Exception
+     * @throws Exception
      */
     public function removeOrderDetail($orderDetailId)
     {
@@ -322,12 +323,12 @@ class BasketService
             $result = $q->execute([
                 $orderDetailId,
             ]);
-        }
-        catch (\Exception $ex) {
-            Logger::log(
-                'error',
-                $ex->getMessage(),
-                $ex
+        } catch (Exception $ex) {
+            $this->logger->error(
+                'Error when removing order detail: ' . $orderDetailId,
+                array(
+                    'error' => $ex->getMessage(),
+                )
             );
         }
 
@@ -337,35 +338,37 @@ class BasketService
     /**
      * Reset the order quantity for a canceled order
      *
-     * @param \Shopware\Models\Order\Detail $orderDetail
+     * @param Detail $orderDetail
      *
-     * @return \Shopware\Models\Order\Detail $orderDetail
+     * @return Detail $orderDetail
      *
-     * @throws \Exception
+     * @throws Exception
      */
-    public function resetOrderDetailQuantity(\Shopware\Models\Order\Detail $orderDetail) {
+    public function resetOrderDetailQuantity(Detail $orderDetail)
+    {
+        $article = null;
+
         // reset quantity
         $orderDetail->setQuantity(0);
 
         try {
             $this->modelManager->persist($orderDetail);
             $this->modelManager->flush($orderDetail);
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             //
         }
 
         // build order detail repository
-        $articleDetailRepository = Shopware()->Models()->getRepository(
+        $articleDetailRepository = Shopware()->Container()->get('models')->getRepository(
             \Shopware\Models\Article\Detail::class
         );
 
         try {
-            /** @var Detail $article */
+            /** @var \Shopware\Models\Article\Detail $article */
             $article = $articleDetailRepository->findOneBy([
                 'number' => $orderDetail->getArticleNumber()
             ]);
-        }
-        catch (\Exception $ex) {
+        } catch (Exception $ex) {
             //
         }
 
@@ -376,7 +379,7 @@ class BasketService
             try {
                 $this->modelManager->persist($article);
                 $this->modelManager->flush($article);
-            } catch(\Exception $e) {
+            } catch (Exception $e) {
                 //
             }
         }
@@ -387,12 +390,12 @@ class BasketService
     /**
      * Append internal comment on order
      *
-     * @param \Shopware\Models\Order\Order $order
+     * @param Order $order
      * @param string $text
      *
-     * @return \Shopware\Models\Order\Order $order;
+     * @return Order $order;
      */
-    public function appendInternalComment(\Shopware\Models\Order\Order $order, $text)
+    public function appendInternalComment(Order $order, $text)
     {
         $comment = $order->getInternalComment();
         $comment = $comment . (strlen($comment) ? "\n\n" : "") . $text;

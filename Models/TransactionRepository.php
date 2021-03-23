@@ -3,7 +3,9 @@
 namespace MollieShopware\Models;
 
 use MollieShopware\Components\Logger;
+use Psr\Log\LoggerInterface;
 use Shopware\Components\Model\ModelRepository;
+use Shopware\Models\Order\Order;
 
 class TransactionRepository extends ModelRepository
 {
@@ -12,19 +14,15 @@ class TransactionRepository extends ModelRepository
      * mollie Order object. This stores the mollie ID with the
      * order so it can be recovered later.
      *
-     * @param \Shopware\Models\Order\Order|null $order
+     * @param Order|null $order
      * @param \Mollie\Api\Resources\Order|null $mollieOrder
      * @param \Mollie\Api\Resources\Payment|null $molliePayment
      *
+     * @return \MollieShopware\Models\Transaction
      * @throws \Exception
      *
-     * @return \MollieShopware\Models\Transaction
      */
-    public function create(
-        \Shopware\Models\Order\Order $order = null,
-        \Mollie\Api\Resources\Order $mollieOrder = null,
-        \Mollie\Api\Resources\Payment $molliePayment = null
-    )
+    public function create(Order $order = null, $mollieOrder = null, $molliePayment = null)
     {
         $transaction = new Transaction();
         $transactionId = $this->getLastId() + 1;
@@ -50,40 +48,30 @@ class TransactionRepository extends ModelRepository
     }
 
     /**
-     * Save a transaction to the database
-     *
      * @param Transaction $transaction
-     * @return \MollieShopware\Models\Transaction
-     * @throws \Exception
+     * @return Transaction
+     * @throws \Doctrine\ORM\ORMException
+     * @throws \Doctrine\ORM\OptimisticLockException
      */
     public function save(Transaction $transaction)
     {
-        try {
-            $this->getEntityManager()->persist($transaction);
-            $this->getEntityManager()->flush($transaction);
-        }
-        catch (\Exception $ex) {
-            Logger::log(
-                'error',
-                $ex->getMessage(),
-                $ex
-            );
-        }
-
+        $this->getEntityManager()->persist($transaction);
+        $this->getEntityManager()->flush($transaction);
+            
         return $transaction;
     }
 
     /**
      * Get the most recent transaction for an order
      *
-     * @param \Shopware\Models\Order\Order $order
+     * @param Order $order
      * @return Transaction
      */
-    public function getMostRecentTransactionForOrder(\Shopware\Models\Order\Order $order)
+    public function getMostRecentTransactionForOrder(Order $order)
     {
         /** @var Transaction $transaction */
         $transaction = $this->findOneBy([
-            'orderId'=> $order->getId()
+            'orderId' => $order->getId()
         ]);
 
         return $transaction;
@@ -92,8 +80,8 @@ class TransactionRepository extends ModelRepository
     /**
      * Get the last transaction id from the database
      *
-     * @throws \Exception
      * @return int|null
+     * @throws \Exception
      */
     public function getLastId()
     {
@@ -105,15 +93,25 @@ class TransactionRepository extends ModelRepository
 
             if (!empty($transaction))
                 $id = $transaction->getId();
-        }
-        catch (\Exception $ex) {
-            Logger::log(
-                'error',
-                $ex->getMessage(),
-                $ex
+        } catch (\Exception $ex) {
+
+            $this->getLogger()->error(
+                'Error when loading last ID',
+                array(
+                    'error' => $ex->getMessage(),
+                )
             );
         }
 
         return $id;
     }
+
+    /**
+     * @return LoggerInterface
+     */
+    private function getLogger()
+    {
+        return Shopware()->Container()->get('mollie_shopware.components.logger');
+    }
+
 }

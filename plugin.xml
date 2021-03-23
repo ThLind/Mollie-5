@@ -6,17 +6,303 @@
     <label lang="de">Mollie</label>
     <label lang="nl">Mollie</label>
 
-    <version>1.5.20</version>
+    <version>1.7.5</version>
     <copyright>(c) Mollie B.V.</copyright>
     <license>MIT</license>
-    <author>Kiener E-commerce</author>
-    <link>https://www.kiener.nl</link>
-
-    <description lang="en">Plugin to allow iDeal payments using the Mollie API (1.5.20)</description>
-    <description lang="nl">Plugin die iDealbetalingen via de Mollie API doorgeeft (1.5.20)</description>
-    <description lang="de">Plugin um Zahlungen mit der Mollie API zu ermöglichen (1.5.20)</description>
-
+    <author>Mollie B.V.</author>
+    <link>https://www.mollie.com</link>
     <compatibility minVersion="5.3.0"/>
+
+    <description lang="en">
+        We do our best to get you started as fast as possible.
+        <br/>
+        Please use our new Wiki documentation to learn more about the installation,
+        configuration and different features of this plugin.
+        <br/>
+        <br/>
+        https://github.com/mollie/Shopware/wiki
+    </description>
+    <description lang="de">
+        Wir geben unser Bestes, damit ihr schnellstmöglich starten könnt.
+        <br/>
+        Bitte benutzt unsere neue Wiki Dokumentation um mehr über Installation,
+        Konfiguration und einzelne Features des Plugins zu lernen.
+        <br/>
+        <br/>
+        https://github.com/mollie/Shopware/wiki
+    </description>
+    <description lang="nl">
+        Wij doen ons best zodat jullie zo snel mogelijk kunnen beginnen.
+        <br/>
+        Gebruik onze nieuwe Wiki-documentatie om meer te weten te komen over de installatie,
+        de configuratie en de individuele features van de plugin.
+        <br/>
+        <br/>
+        https://github.com/mollie/Shopware/wiki
+    </description>
+
+
+    <changelog version="1.7.5">
+        <changes lang="de">
+            - Problembehebung, dass abgelaufene Bestellungen nicht automatisch storniert wurden, wenn man die Plugin Einstellung "Bestellungen in Mollie erstellen" verwendet.
+        </changes>
+        <changes lang="en">
+            - Fix problem where expired orders did not get cancelled automatically when using the plugin configuration with "create orders in Mollie".
+        </changes>
+    </changelog>
+
+    <changelog version="1.7.4">
+        <changes lang="de">
+            - Behebung von Kompatibilitätsproblemen mit PHP 5.6 im Checkout.
+            - Fehlerbehebung von Apple Pay Direct bei Bestellung als Gast mit einer E-Mail Adresse, die bereits im Shop registriert ist.
+            - Optimierung und Fehlerbehebung der Apple Pay Direct Darstellung im Offcanvas Warenkorb, u.A. für Themes wie "Themeware".
+            - Neue Logs bei Anpassungen von Versandarten in Apple Pay Direct via Events.
+        </changes>
+        <changes lang="en">
+            - Fix compatibility issues with PHP 5.6 in the checkout.
+            - Fix problem of Apple Pay Direct checkout if the email address of the guest user is already registered in the shop.
+            - Optimization and fix of the Apple Pay Direct button in the offcanvas basket for better support of "Themeware" and other themes.
+            - Add logs on custom adjustments of shipping methods in Apple Pay Direct via events.
+        </changes>
+    </changelog>
+
+    <changelog version="1.7.3">
+        <changes lang="de">
+            - Neues CLI Kommando zum Importieren/Aktualisieren von Zahlungsarten
+            - Neue Shopware Filter Events um selbst Einfluss auf Änderung von Zahlungs- sowie Bestellstatus nehmen zu können.
+              Dadurch kann der von Mollie verwendete Status überschrieben werden, und individuell auf eigene Einträge/Abläufe eingegangen werden.
+            - Optimierung der Imports von Zahlungsarten damit eigene Einstellungen wie z.B. "aktiv" erhalten bleiben und nicht mehr überschrieben werden.
+            - Problembehebung in seltenen Fällen in denen bei Zahlungsarten eine falsche "Action" in der Datenbank war, und man somit sofort auf die "Finish" Seite des Checkouts gelangte, ohne dass etwas durchgeführt wurde.
+            - Problembehebung in denen manchmal Zahlungs Icons bei einer frischen Installation gefehlt haben.
+            - Behebung von Kompatibilitätsproblemen mit Shopware 5.4, die zu Fehlern im Klarna Checkout führten.
+            - Behebung von Apple Pay Direct Problemen, wenn ein Express (Gast) Checkout mit einer E-mail durchgeführt wird, die auch als "echter" Kunde registriert ist.
+        </changes>
+        <changes lang="en">
+            - Add new CLI command to import/update payment methods
+            - Add new Shopware Filter Events for payment and status updates. You can now individually inject and use a custom status instead of the suggested one from Mollie.
+            - Improve Payment Method import/update functionality to keep custom settings like "active" when importing methods again.
+            - Fix very rare scenario where payment "actions" are not set correctly in the database, which leads to an immediate redirect to the checkout finish page without doing anything.
+            - Fix problem where sometimes payment method icons have not been imported correctly and thus where not visible.
+            - Fix compatibility problem with Shopware 5.4 when doing a checkout with Klarna.
+            - Fix error with Apple Pay Direct if an express (guest) checkout is done with an email that already exists as a "real" customer.
+        </changes>
+    </changelog>
+
+    <changelog version="1.7.2">
+        <changes lang="de">
+            - Erweiterung zur Fehlerbehebung von mehrfach erstellten Bestellungen. In manchen Situationen wurden nach wie vor E-Mails dupliziert verschickt.
+        </changes>
+        <changes lang="en">
+            - Addon to the multiple order fix. In some circumstances some mails still got sent several times.
+     </changes>
+    </changelog>
+
+    <changelog version="1.7.1">
+        <changes lang="de">
+            - Neuer Button in der Plugin Konfiguration, mit dem die Zahlungsarten einfach und unkompliziert ohne Neuinstallation des Plugins aktualisiert werden können.
+            - Rückerstattungen (voll + teilweise) können nun auch mit dem neuen CLI Kommando eingeleitet und gestartet werden
+            - Behebung von manchmal mehrfach erstellten Bestellungen in Kombination mit "Bestellunge NACH Zahlung erstellen" durch mehrfaches Ausführen des Rückweges von Mollie zu Shopware.
+            Das Plugin lässt den Weg zu, ist nun jedoch toleranter und überspringt das erneute Anlegen der Bestellung.
+            - Die Ausgabe des Klarna CLI Shipping Kommandos ist nun kompakter mit neuer tabellarischer Ausgabe.
+            - Apple Pay Direct wird nun durch Apple Pay ausgetauscht, wenn ein Fehler passiert und man sich auf der Bestätigungsseite für einen erneuten Versuch befindet.
+            - Behebung von Apple Pay Direct Javascript Problemen im Internet Explorer
+            - Kompatibilitätsproblem mit dem DHL Wunschpaket und dem Erstellen von Bestellungen in Mollie behoben. Die zusätzlichen Versandkosten werden nun korrekt miteinbezogen.
+            - Behebung, dass Bestellungen, die über das Truck Icon im Backend als "verschickt" markiert wurden, nicht in Shopware als verschickt markiert wurden.
+            Dies hatte nur zur Folge dass z.B. beim Ausführen des CLI Kommandos erneut versucht wurde, diese via Mollie zu verschicken.
+        </changes>
+        <changes lang="en">
+            - Added new button in plugin configuration, to easily update payment methods without reinstalling the plugin.
+            - Refunds (full + partial) can now be started with the brand new CLI command
+            - Fix of multiple created orders in combination with "create order AFTER payment" in scenarios where the way, back from Mollie to Shopware, has been called multiple times.
+            The plugin is now more tolerant and just skips creating an additional order in this case.
+            - The output of the Klarna CLI shipping command is now more compact with the new table view.
+            - Apple Pay Direct is now switched to Apple Pay if an error happens and the user is redirected to the confirm page for a second try.
+            - Fix Apple Pay Direct Javascript errors in Internet Explorer
+            - Fix compatibility problem with DHL Wunschpaket plugin in combination with "create orders in Mollie and not only transactions".
+            The shipping costs will now be correctly added to Mollie.
+            - Fix problem that orders did not get marked as "shipped" within Shopware itself if the truck icon has been used in the backend.
+            This did only lead to the case that processes like the CLI command would have tried to ship these orders again via Mollie.
+        </changes>
+    </changelog>
+
+    <changelog version="1.7.0">
+        <changes lang="de">
+            - Großer Umbau der gesamten Zahlungsabfläufe im Plugin für eine allgemein bessere Stabilität sowie besseres Protokollieren von Fehlern.
+            - Installation/Update/Neuinstallation säubert nun nicht mehr benötigte Datenbankfelder (Mollie Transactions OrderVariables), was die Datenbankgröße reduziert und die Performance des Shops während des Checkouts erhöht.
+            - Neuer Index für die Datenbank (Mollie Transaction) zur allgemeinen Performance Optimierung in Shops mit vielen Bestellungen.
+            - Anonyme Payment-Token werden nun in den Logs beim Starten einer Bestellung hinzugefügt. Dies vereinfacht das Analysieren von Zahlungen mit Apple Pay Direct sowie Kreditkartenkomponenten.
+            - Plugin Feature "Zurücksetzen des Gesamtbetrags + Versandkosten bei Storno" funktioniert nun unabhängig von "Lagerbestand zurücksetzen".
+            - Die Apple Pay Direct Session von Kunden/Browsern wird nun korrekt "abgeschlossen". Ohne diesem Abschluss kann es sein, dass das Apple Pay Formular beim nächsten Versuch nicht sofort direkt funktioniert.
+        </changes>
+        <changes lang="en">
+            - Huge refactoring of the payment flows to improve the overall stability of the plugin along with better error logs.
+            - Installing/Updating/Reinstalling will clean unused fields in the database (Mollie Transactions OrderVariables) that will decrease the database size and improve the checkout performance.
+            - Add new database index (Mollie Transactions) to improve performance for shops with lots of orders.
+            - Add anonymized payment tokens to log entries for better debugging of Apple Pay Direct and Credit Card Components.
+            - Plugin Feature "Cancel Total Amount and Shipping Costs" can now be set independent from the "Reset Stock" functionality.
+            - Add clean completion of Apple Pay Direct session for customers on successful payments. Otherwise it could be that the Apple Pay sheet does not completely work on a retry.
+        </changes>
+    </changelog>
+
+    <changelog version="1.6.7">
+        <changes lang="de">
+            - Der Test Modus ist nun im Shop Storefront neben dem Namen der Zahlungsart sichtbar.
+            Dies erleichtert das Testen - man weiß somit sofort, wenn man auf "Live" Modus zahlen würde.
+            - Es gibt nun einen neuen Logger im Shopware Backend. Mollie erstellt dadurch eine separate
+            Log Datei mit weiteren Informationen die beim Analysieren helfen.
+            Zusätzlich kann die Protokollierungsstufe in den Plugin Einstellungen angepasst werden.
+            Wir empfehlen zumindest ERROR bzw. INFO.
+            - Die Struktur der Plugin Einstellungen wurde vereinfacht und die Übersicht somit erleichtert.
+            Auch die Bezeichungen der Einstellungen sind nun verkürzt und einfacher gestaltet.
+            - Der Test Modus kann in den Plugin Einstellungen nun auch von einem Hauptshop vererbt werden.
+            - Verbesserte Übersetzungen für DE, EN und NL im Shop sowie im Shopware Backend.
+            - Umbau der Rundungs-Logik für das Erstellen von Bestellungen in Mollie.
+            Dadurch werden Fehler wie "VAT Amount of Line Item does not match" oder "Total Amount does not match" verhindert.
+            - Duplizierte Status-History Einträge in Bestellungen werden nun nicht mehr erstellt bei einem
+            Status Übergang von einer Bestellung.
+            - Problembehebung des ExtJS Fehler Dialogs bei initialer Plugin Installation.
+        </changes>
+        <changes lang="en">
+            - The Test Mode is now visible in the Storefront next to the payment method names. This helps when testing,
+            so you're always know your not in production mode.
+            - Added a new logger in the Shopware Backend. Mollie now creates a separate log file with enhanced
+            information. You can also adjust the log level within the plugin configuration.
+            We recommend at least ERROR, or even INFO.
+            - Improved the plugin configuration with a structured layout along with better names for
+            the configuration settings.
+            - Test Mode in the plugin configuration can now also be inherited from a base shop
+            - Improve translations for DE, EN and NL in the Storefront and Shopware Backend
+            - Refactored the rounding algorithms when creating orders in Mollie.
+            This avoids errors like "VAT amount in line item does not match"...or "total amount does not match".
+            - Remove duplicate entries in the order status history when transitions occur
+            - Fix ExtJS Error Dialog in Shopware Backend when installing the plugin
+        </changes>
+    </changelog>
+
+    <changelog version="1.6.6">
+        <changes lang="de">
+            - Neue Apple Pay Direct Einschränkungen in den Plugin Konfigurationen, um den Apple Pay Button auf bestimmten Seiten ohne Programmierung auszublenden.
+            - Apple Pay Direct verwendet nun den bestehenden Shop Account, wenn man bereits angemeldet ist.
+            - "Komplett bezahlt" ist nun in den Plugin Konfigurationen für "Status für authorisierte Zahlungen" möglich, um z.B. Klarna Bestellungen sofort als "bezahlt" zu markieren.
+            - Neues Entwickler Feature, um lokal ganz einfach mit echten Webhooks sowie mit Apple Pay Direct entwickeln zu können, ohne irgendwelche Anpassungen am Plugin machen zu müssen.
+            (Bitte lest dazu die entsprechenden Anleitungen auf unserer WIKI Seite).
+            - Verbesserte Klarna "Shipping" Erkennung beim Wechsel eines Bestellstatus via CSV Upload oder Dritthersteller Plugins.
+            Das Mollie Plugin hört nun auf "postUpdates" von Doctrine Entities.
+            Sobald euer Code, oder der von einem Plugin, die bevorzugte Möglichkeit zum Aktualisieren einer Bestellung via Entity Manager verwendet, wird ein "Shipping" durchgeführt, sofern die Konditionen zutreffen.
+            - Verbessertes Klarna Shipping CLI Kommando mit optimierten Ausgaben + automatischer Reparatur von Bestellungen, deren Daten nicht mehr mit Mollie Daten synchron sind,
+            was zu einer angestauten Warteschlange bei der Abarbeitung führen kann.
+            - Problembehebung von "An order ID should start with 'ord_'". Dies kommt nur wenn Bestellungen nach der Zahlung in Shopware erstellt werden (Plugin Konfiguration).
+            Hier wurde ein Teil des Codes ausgeführt, der nicht ausgeführt werden sollte.
+            Nachdem die Ausführung jedoch scheitert, gab es kein richtiges Problem - nur die unnötige Ausgabe in den Logs.
+        </changes>
+        <changes lang="en">
+            - Add new Apple Pay Direct Restriction options in the plugin configuration to hide the Apple Pay button on specific pages without the need to code anything.
+            - Apple Pay Direct uses your existing account, if you are signed in in the shop.
+            - Add "Completely paid" to the plugin configuration for "Status on authorized payments" to e.g. immediately mark Klarna payments as "paid".
+            - Add brand new developer feature to run real webhooks and Apple Pay Direct locally without changing anything in the plugin.
+            (Please see our WIKI for more details)
+            - Improved Klarna "shipping detection" for order status transitions in combination with CSV upload and other plugins.
+            The Mollie plugin does now listen for Doctrine Entity "postUpdates".
+            As soon as you or a plugin uses the preferred way to update the order status with the EntityManager, the shipping will be started if conditions are met.
+            - Improved Klarna Shipping CLI command with better output + "auto repair" mechanism to repair any problems and data that might be out of sync,
+            which could lead to a jammed queue.
+            - Fix error "An order ID should start with 'ord_'", that only happens when you create orders after the payment (plugin configuration).
+            The code part did not work, but shouldn't be triggered anyway - so it was not a problem at all - it only led to that disturbing log entry.
+        </changes>
+    </changelog>
+
+    <changelog version="1.6.5">
+        <changes lang="de">
+            - Problembehebung, dass rückerstattete Bestellungen wieder als "bezahlt" in Shopware markiert werden, sobald eine Webhook Benachrichtigung nach einer Rückerstattung empfangen wird.
+            - Problembehebung eines seltenen Falls [Credit Card Token Not Found]. Dieses trat bei B2B Kunden, oder Kunden ohne korrekten Attribut-Einträgen (in der Datenbank) auf.
+        </changes>
+        <changes lang="en">
+            - Fix the problem that refunded orders are always marked as "completely paid" again in Shopware, as soon as a webhook notification is received after a refund process.
+            - Fix a rare problem [Credit Card Token Not Found] that happens for either B2B users or users without a valid attributes-entry (in the database).
+        </changes>
+    </changelog>
+
+    <changelog version="1.6.4">
+        <changes lang="de">
+            - Apple Pay Direct benutzt nun Stückzahl 1, wenn im Theme auf der Artikel Seite keine Auswahlliste für die Stückzahl ist.
+            - Optimierung von Abständen, wenn Apple Pay Direct nicht aktiviert ist.
+            - Problembehebung, dass Mollie die Bestellung nicht annimmt durch minimale Rundungsabweichungen in seltenen Fällen
+            (The amount of the order does not match the total amount from the order lines.)
+        </changes>
+        <changes lang="en">
+            - Apple Pay Direct does now use quantity 1 as fallback, if the Theme does not have a dropdown for the quantity on the article detail page.
+            - Optimization of margins if Apple Pay Direct is not active
+            - Fix very rare error due to rounding problems that prevented Mollie to receive and save the order.
+            (The amount of the order does not match the total amount from the order lines.)
+        </changes>
+    </changelog>
+
+    <changelog version="1.6.3">
+        <changes lang="de">
+            - Behebung des Problems, dass Bestellbestätigungs E-Mails nicht versendet wurden
+            - Ursprüngliche Apple Pay Zahlart wird nun wieder ausgeblendet, wenn Apple Pay nicht zur Verfügung steht
+            - kleine Verbesserungen und Optimierungen
+        </changes>
+        <changes lang="en">
+            - Fix broken order confirmation emails that haven't been sent out.
+            - Original Apple Pay payment method is now hidden again if Apple Pay is not available
+            - smaller improvements and refactorings
+        </changes>
+    </changelog>
+
+    <changelog version="1.6.2">
+        <changes lang="de">
+            - Behebung eines Problems bei dem die Bestellungen in Shopware nicht erstellt werden, sofern die Konfiguration "Bestellungen vor Zahlungsabschluss erstellen" deaktiviert ist
+            - Behebung des Problems, dass der schwarze Ladebildschirm bei Zahlungsauswahl nicht mehr verschwindet
+            - Behebung des Java Script Problems bei den "Auswahl" Buttons (in Kombination mit Credit Card Components) auf der Zahlungsseite
+        </changes>
+        <changes lang="en">
+            - Fix problem that orders have not been created in Shopware if plugin was configured to not create orders before the payment
+            - Fix problem with black loading screen screen on the payment selection page
+            - Fixed JavaScript error for the submit buttons while using credit card on the payment selection page
+        </changes>
+    </changelog>
+
+    <changelog version="1.6.1">
+        <changes lang="de">
+            - Behebung einer kaputten Zahlungs Return URL in seltenen Fällen
+        </changes>
+        <changes lang="en">
+            - Fix broken payment return page in some rare scenarios
+        </changes>
+    </changelog>
+
+    <changelog version="1.6.0">
+        <changes lang="de">
+            - Neue "Apple Pay Direct" Zahlungsart für einen schnellen Checkout auf Detail Seiten und im Warenkorb.
+            - Neue Konfiguration für LIVE und TEST API-Keys, sowie einen Testmodus (aktiv/inaktiv).
+            - Neue "Vererbungs" Möglichkeit in Konfigurationen mit welcher ein Subshop die gleiche Konfiguration wie der Hauptshop erhalten kann.
+            - Freitextfelder des Warenkorbs werden nun bei fehlerhaften Zahlungen korrekt wiederhergestellt.
+            - Optimierter Notification Webhook Endpunkt, der nun stets sauber technische Ausgaben liefert,
+            sowie keine sensiblen Daten mehr anzeigt (diese sind nun in den Shopware Backend Logs sichtbar).
+            - Probleme bei der Markierung von Klarna Bestellungen als "geliefert" im Shopware Backend behoben.
+            - Kaputtes Klarna CLI Kommando repariert, welches über das Terminal Klarna Zahlungen als "geliefert" markieren kann.
+            - Seltenes Problem in Kombination mit der Shopware Advanced Promotion Suite und der Mollie Orders API behoben.
+            - Problem mit mehreren Subshops und unterschiedlichen Konfigurationen in Mollie Plugin behoben.
+            Das Plugin benutzt nun die korrekte Konfiguration des Subshops der jeweiligen Bestellung, wenn Aktionen
+            im Shopware Backend oder in Notifications durchgeführt werden.
+            - Viele kleine Behebungen und Verbesserungen um das Plugin stabiler zu machen.
+        </changes>
+        <changes lang="en">
+            - New "Apple Pay Direct" payment method for quick checkout on detail pages and in your cart.
+            - New option to set both, the LIVE and TEST API-keys along with a Test Mode (enabled/disabled)
+            - New configuration option to allow a sub shop to inherit the configuration from the main shop.
+            - Custom Fields will now be restored on failed payments.
+            - Improved notification webhook endpoint to always show a technical output, but no sensitive data
+            (will be shown in the Shopware backend logs)
+            - Fix problems when setting "shipped" for Klarna payments from Backend.
+            - Fix broken Klarna CLI command to mark orders as "shipped".
+            - Fix rare problem with the Shopware Advanced Promotion plugin and the Mollie Orders API.
+            - Fix problems with multiple sub shops and plugin configurations. The plugin will now always
+            use the correct configuration from the sub shop of a an order (in the Backend and in notifications).
+            - Lots of minor fixes and improvements to make the plugin more stable.
+        </changes>
+    </changelog>
 
     <changelog version="1.5.20">
         <changes lang="de">

@@ -4,3 +4,7 @@ releases
 /*.sh
 /scoper.inc.php
 /UpdateVersionNumber.php
+
+
+.reports
+.DS_Store

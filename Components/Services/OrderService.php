@@ -2,21 +2,36 @@
 
 namespace MollieShopware\Components\Services;
 
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\ORM\EntityManager;
 use MollieShopware\Components\Logger;
+use MollieShopware\Exceptions\OrderNotFoundException;
+use MollieShopware\Exceptions\TransactionNotFoundException;
+use MollieShopware\Models\Transaction;
+use Psr\Log\LoggerInterface;
+use Shopware\Components\Model\ModelManager;
+use Shopware\Models\Order\History;
+use Shopware\Models\Order\Order;
+use Shopware\Models\Order\Repository;
 
 class OrderService
 {
-    /** @var \Shopware\Components\Model\ModelManager $modelManager */
+    /** @var ModelManager $modelManager */
     protected $modelManager;
 
     /**
-     * Constructor
-     *
-     * @param \Shopware\Components\Model\ModelManager $modelManager
+     * @var LoggerInterface
      */
-    public function __construct(\Shopware\Components\Model\ModelManager $modelManager)
+    private $logger;
+
+    /**
+     * @param ModelManager $modelManager
+     * @param LoggerInterface $logger
+     */
+    public function __construct(ModelManager $modelManager, LoggerInterface $logger)
     {
         $this->modelManager = $modelManager;
+        $this->logger = $logger;
     }
 
     /**
@@ -24,7 +39,7 @@ class OrderService
      *
      * @param int $orderId
      *
-     * @return \Shopware\Models\Order\Order $order
+     * @return Order $order
      *
      * @throws \Exception
      */
@@ -35,17 +50,18 @@ class OrderService
         try {
             /** @var \Shopware\Models\Order\Repository $orderRepo */
             $orderRepo = $this->modelManager->getRepository(
-                \Shopware\Models\Order\Order::class
+                Order::class
             );
 
-            /** @var \Shopware\Models\Order\Order $order */
+            /** @var Order $order */
             $order = $orderRepo->find($orderId);
-        }
-        catch (\Exception $ex) {
-            Logger::log(
-                'error',
-                $ex->getMessage(),
-                $ex
+        } catch (\Exception $ex) {
+
+            $this->logger->error(
+                'Error when loading order by id: ' . $orderId,
+                array(
+                    'error' => $ex->getMessage(),
+                )
             );
         }
 
@@ -73,12 +89,13 @@ class OrderService
 
             /** @var \Shopware\Models\Order\Detail $detail */
             $detail = $orderRepo->find($orderDetailId);
-        }
-        catch (\Exception $ex) {
-            Logger::log(
-                'error',
-                $ex->getMessage(),
-                $ex
+        } catch (\Exception $ex) {
+
+            $this->logger->error(
+                'Error when loading order detail by id: ' . $orderDetailId,
+                array(
+                    'error' => $ex->getMessage(),
+                )
             );
         }
 
@@ -86,50 +103,54 @@ class OrderService
     }
 
     /**
-     * Get an order by it's number
-     *
      * @param string $orderNumber
      *
-     * @return \Shopware\Models\Order\Order $order
+     * @return Transaction
      *
-     * @throws \Exception
+     * @throws TransactionNotFoundException
      */
-    public function getOrderByNumber($orderNumber)
+    public function getOrderTransactionByNumber($orderNumber)
     {
-        $order = null;
+        /** @var Repository $transactionRepository */
+        $transactionRepository = $this->modelManager->getRepository(Transaction::class);
+        $transactions = new ArrayCollection($transactionRepository->findBy([
+            'orderNumber' => $orderNumber
+        ]));
 
-        try {
-            /** @var \Shopware\Models\Order\Repository $orderRepo */
-            $orderRepo = $this->modelManager->getRepository(
-                \Shopware\Models\Order\Order::class
-            );
+        if ($transactions->count() === 0) {
+            throw new TransactionNotFoundException(sprintf('with ordernumber %s', $orderNumber));
+        }
 
-            /** @var \Shopware\Models\Order\Order $order */
-            $order = $orderRepo->findOneBy([
-                'number' => $orderNumber
-            ]);
-        }
-        catch (\Exception $ex) {
-            Logger::log(
-                'error',
-                $ex->getMessage(),
-                $ex
-            );
-        }
+        return $transactions->first();
+    }
+
+    /**
+     * @param $orderNumber
+     * @return Order
+     */
+    public function getShopwareOrderByNumber($orderNumber)
+    {
+        /** @var \Shopware\Models\Order\Repository $orderRepo */
+        $orderRepo = $this->modelManager->getRepository(Order::class);
+
+        /** @var Order $order */
+        $order = $orderRepo->findOneBy([
+            'number' => $orderNumber
+        ]);
 
         return $order;
     }
 
     /**
-     * Get Mollie order ID for order
+     * Gets the external Mollie order id from a provided Shopware order.
+     * The Mollie order id does only exist if the ORDERS-API has been used.
+     * The id is searched in the Mollie transaction database table.
      *
-     * @param $orderId
-     *
+     * @param Order $orderId
      * @return null|string
-     *
      * @throws \Exception
      */
-    public function getMollieOrderId($orderId)
+    public function getMollieOrderId($order)
     {
         $mollieId = null;
         $transaction = null;
@@ -142,14 +163,15 @@ class OrderService
 
             /** @var \MollieShopware\Models\Transaction $transaction */
             $transaction = $transactionRepo->findOneBy([
-                'orderId' => $orderId
+                'orderId' => $order->getId()
             ]);
-        }
-        catch (\Exception $ex) {
-            Logger::log(
-                'error',
-                $ex->getMessage(),
-                $ex
+        } catch (\Exception $ex) {
+
+            $this->logger->error(
+                'Error when loading mollie order id',
+                array(
+                    'error' => $ex->getMessage(),
+                )
             );
         }
 
@@ -157,6 +179,43 @@ class OrderService
             $mollieId = $transaction->getMollieId();
 
         return $mollieId;
+    }
+
+    /**
+     * @param int $orderId
+     * @param array|null $orderBy
+     * @param int|null $offset
+     * @param int|null $limit
+     * @return array|int|string
+     */
+    public function getOrderStatusHistory($orderId, $orderBy, $offset, $limit)
+    {
+        $builder = $this->modelManager->createQueryBuilder();
+
+        $builder->select([
+            'history.changeDate',
+            'user.name as userName',
+            'history.previousOrderStatusId as prevOrderStatusId',
+            'history.orderStatusId as currentOrderStatusId',
+            'history.previousPaymentStatusId as prevPaymentStatusId',
+            'history.paymentStatusId as currentPaymentStatusId',
+            'history.comment as comment'
+        ]);
+
+        $builder->from(History::class, 'history')
+            ->leftJoin('history.user', 'user')
+            ->where('history.orderId = ?1')
+            ->setParameter(1, $orderId);
+
+        if (!empty($orderBy)) {
+            $builder->addOrderBy($orderBy);
+        }
+
+        if ($limit !== null) {
+            $builder->setFirstResult($offset)->setMaxResults($limit);
+        }
+
+        return $builder->getQuery()->getArrayResult();
     }
 
     /**
@@ -183,12 +242,13 @@ class OrderService
             $transaction = $transactionRepo->findOneBy([
                 'orderId' => $orderId
             ]);
-        }
-        catch (\Exception $ex) {
-            Logger::log(
-                'error',
-                $ex->getMessage(),
-                $ex
+        } catch (\Exception $ex) {
+
+            $this->logger->error(
+                'Error when loading mollie payment id of order: ' . $orderId,
+                array(
+                    'error' => $ex->getMessage(),
+                )
             );
         }
 
@@ -210,8 +270,8 @@ class OrderService
         $order = null;
         $items = [];
 
-        /** @var \Shopware\Models\Order\Order $order */
-        if ($orderId instanceof \Shopware\Models\Order\Order)
+        /** @var Order $order */
+        if ($orderId instanceof Order)
             $order = $orderId;
         else
             $order = $this->getOrderById($orderId);
@@ -279,15 +339,62 @@ class OrderService
                     $items[] = $orderLine;
                 }
             }
-        }
-        catch (\Exception $ex) {
-            Logger::log(
-                'error',
-                $ex->getMessage(),
-                $ex
+        } catch (\Exception $ex) {
+            $this->logger->error(
+                'Error when loading order lines',
+                array(
+                    'error' => $ex->getMessage(),
+                )
             );
         }
 
         return $items;
     }
+
+    public function getOrderBySessionId(string $sessionId)
+    {
+        $order = null;
+
+        try {
+            /** @var \Shopware\Models\Order\Repository $orderRepo */
+            $orderRepo = $this->modelManager->getRepository(
+                Order::class
+            );
+
+            /** @var Order $order */
+            $order = $orderRepo->findOneBy([
+                'temporaryId' => $sessionId
+            ]);
+        } catch (\Exception $ex) {
+            $this->logger->error(
+                'Error when loading order by session ID: ' . $sessionId,
+                array(
+                    'error' => $ex->getMessage(),
+                )
+            );
+        }
+
+        return $order;
+    }
+
+    /**
+     * @param string $transactionId
+     * @return Order
+     * @throws OrderNotFoundException
+     */
+    public function getOrderByTransactionId(string $transactionId)
+    {
+        /** @var \Shopware\Models\Order\Repository $orderRepo */
+        $orderRepo = $this->modelManager->getRepository(Order::class);
+
+        /** @var Order $order */
+        $order = $orderRepo->findOneBy(['transactionId' => $transactionId]);
+
+        if (!$order instanceof Order) {
+            throw new OrderNotFoundException('Order for Transaction: ' . $transactionId . ' not found!');
+        }
+
+        return $order;
+    }
+
 }
